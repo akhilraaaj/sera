@@ -10,7 +10,9 @@ enum TimelineSelection: Equatable, Hashable {
 final class AppState: ObservableObject {
     @Published var selection: TimelineSelection = .year
     @Published var visualizationStyle: VisualizationStyle = .ring
+    @Published var displayMode: DisplayMode = .menuBar
     @Published var isExpanded: Bool = false
+    @Published var isNotchExpanded: Bool = false
     @Published var isPanelOpen: Bool = false
     @Published private(set) var snapshot: ProgressSnapshot = .empty
     @Published private(set) var now: Date = Date()
@@ -21,6 +23,7 @@ final class AppState: ObservableObject {
 
     private let styleKey = "sera.visualizationStyle"
     private let selectionKey = "sera.selection"
+    private let displayModeKey = "sera.displayMode"
 
     init(goalEngine: GoalEngine? = nil, timeEngine: TimeEngine = TimeEngine()) {
         self.goalEngine = goalEngine ?? GoalEngine()
@@ -57,6 +60,36 @@ final class AppState: ObservableObject {
         Task { @MainActor in
             visualizationStyle = style
             UserDefaults.standard.set(style.rawValue, forKey: styleKey)
+        }
+    }
+
+    func cycleVisualizationStyle() {
+        let styles = VisualizationStyle.allCases
+        guard let index = styles.firstIndex(of: visualizationStyle) else {
+            setVisualizationStyle(.ring)
+            return
+        }
+        setVisualizationStyle(styles[(index + 1) % styles.count])
+    }
+
+    func setDisplayMode(_ mode: DisplayMode) {
+        guard mode != displayMode else { return }
+        Task { @MainActor in
+            displayMode = mode
+            UserDefaults.standard.set(mode.rawValue, forKey: displayModeKey)
+            if !mode.showsNotch {
+                isNotchExpanded = false
+            }
+        }
+    }
+
+    func setNotchExpanded(_ expanded: Bool) {
+        Task { @MainActor in
+            guard isNotchExpanded != expanded else { return }
+            isNotchExpanded = expanded
+            if !expanded {
+                isPanelOpen = false
+            }
         }
     }
 
@@ -159,6 +192,11 @@ final class AppState: ObservableObject {
         if let raw = UserDefaults.standard.string(forKey: styleKey),
            let style = VisualizationStyle(rawValue: raw) {
             visualizationStyle = style
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: displayModeKey),
+           let mode = DisplayMode(rawValue: raw) {
+            displayMode = mode
         }
 
         if let raw = UserDefaults.standard.string(forKey: selectionKey) {

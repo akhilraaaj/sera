@@ -94,7 +94,7 @@ struct ProgressMetricCards: View {
 
 // MARK: - Radial block semicircle (matches reference)
 
-private struct SegmentedSemicircleGauge: View {
+struct SegmentedSemicircleGauge: View {
     var progress: Double
     var segmentCount: Int
 

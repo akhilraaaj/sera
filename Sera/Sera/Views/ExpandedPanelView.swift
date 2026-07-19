@@ -147,15 +147,49 @@ struct GoalSelectorPanel: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
 
+                Text("Placement")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+
+                Picker(
+                    "Placement",
+                    selection: Binding(
+                        get: { appState.displayMode },
+                        set: { appState.setDisplayMode($0) }
+                    )
+                ) {
+                    ForEach(DisplayMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                Text(placementHint)
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Button("Done") {
                     appState.closeTimelines()
-                    appState.setExpanded(false)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .padding(14)
+        }
+    }
+
+    private var placementHint: String {
+        switch appState.displayMode {
+        case .menuBar:
+            return "Click the menu bar item for the glass panel."
+        case .notch:
+            return "Hover the notch island to expand. Works best on notched MacBooks."
+        case .both:
+            return "Menu bar item plus a notch island that expands on hover."
         }
     }
 

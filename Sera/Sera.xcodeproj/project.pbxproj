@@ -27,6 +27,11 @@
 		A10000000000000000000011 /* DateMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* DateMath.swift */; };
 		A10000000000000000000012 /* InsightEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* InsightEngine.swift */; };
 		A10000000000000000000019 /* SeraTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* SeraTheme.swift */; };
+		A1000000000000000000001A /* DisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* DisplayMode.swift */; };
+		A1000000000000000000001B /* NotchGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* NotchGeometry.swift */; };
+		A1000000000000000000001C /* NotchWindowEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* NotchWindowEngine.swift */; };
+		A1000000000000000000001D /* NotchWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001D /* NotchWidgetView.swift */; };
+		A1000000000000000000001E /* MenuBarAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001E /* MenuBarAppearance.swift */; };
 		A10000000000000000000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -51,6 +56,11 @@
 		A20000000000000000000011 /* DateMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateMath.swift; sourceTree = "<group>"; };
 		A20000000000000000000012 /* InsightEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightEngine.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* SeraTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeraTheme.swift; sourceTree = "<group>"; };
+		A2000000000000000000001A /* DisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayMode.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* NotchGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchGeometry.swift; sourceTree = "<group>"; };
+		A2000000000000000000001C /* NotchWindowEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchWindowEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000001D /* NotchWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchWidgetView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001E /* MenuBarAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarAppearance.swift; sourceTree = "<group>"; };
 		A20000000000000000000013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000000000000000000015 /* Sera.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Sera.entitlements; sourceTree = "<group>"; };
@@ -114,6 +124,7 @@
 			children = (
 				A20000000000000000000003 /* TimeEngine.swift */,
 				A20000000000000000000004 /* GoalEngine.swift */,
+				A2000000000000000000001C /* NotchWindowEngine.swift */,
 			);
 			path = Engines;
 			sourceTree = "<group>";
@@ -124,6 +135,7 @@
 				A20000000000000000000006 /* Goal.swift */,
 				A20000000000000000000007 /* VisualizationStyle.swift */,
 				A20000000000000000000008 /* ProgressSnapshot.swift */,
+				A2000000000000000000001A /* DisplayMode.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -142,6 +154,7 @@
 				A2000000000000000000000A /* WidgetView.swift */,
 				A20000000000000000000017 /* MenuBarPanelView.swift */,
 				A20000000000000000000018 /* MenuBarLabelView.swift */,
+				A2000000000000000000001D /* NotchWidgetView.swift */,
 				A2000000000000000000000B /* GaugeProgressView.swift */,
 				A2000000000000000000000C /* ProgressRingView.swift */,
 				A2000000000000000000000D /* LinearProgressView.swift */,
@@ -158,6 +171,8 @@
 				A20000000000000000000011 /* DateMath.swift */,
 				A20000000000000000000012 /* InsightEngine.swift */,
 				A20000000000000000000019 /* SeraTheme.swift */,
+				A2000000000000000000001B /* NotchGeometry.swift */,
+				A2000000000000000000001E /* MenuBarAppearance.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -251,6 +266,11 @@
 				A10000000000000000000011 /* DateMath.swift in Sources */,
 				A10000000000000000000012 /* InsightEngine.swift in Sources */,
 				A10000000000000000000019 /* SeraTheme.swift in Sources */,
+				A1000000000000000000001A /* DisplayMode.swift in Sources */,
+				A1000000000000000000001B /* NotchGeometry.swift in Sources */,
+				A1000000000000000000001C /* NotchWindowEngine.swift in Sources */,
+				A1000000000000000000001D /* NotchWidgetView.swift in Sources */,
+				A1000000000000000000001E /* MenuBarAppearance.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

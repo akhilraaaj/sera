@@ -1,6 +1,6 @@
 # Sera
 
-Time & goal visualization widget for macOS. Phase 1 MVP: a **menu bar** item with the system glass dropdown that shows live year progress.
+Time & goal visualization widget for macOS. Phase 1 MVP: a **menu bar** item and an optional **notch / Dynamic Island** widget that expands on hover.
 
 ## Requirements
 
@@ -21,15 +21,18 @@ The app runs as an accessory (`LSUIElement`) with no Dock icon. Look in the **to
 | Action | Result |
 |--------|--------|
 | Click status item | Open system glass dropdown |
-| Timelines | Goal selector + style picker |
-| Quit Sera | Quit from the dropdown |
+| Hover notch island | Expand Dynamic Island–style panel (Notch / Both placement) |
+| Timelines | Goal selector + style + placement picker |
+| Placement | Menu Bar / Notch / Both |
+| Quit Sera | Quit from the dropdown or expanded notch |
 
 ## Architecture
 
 - **TimeEngine** — year / goal progress math
 - **GoalEngine** — local goal store (`UserDefaults`)
 - **MenuBarExtra** — native glass menu bar window (SwiftUI)
-- **AppState** — Combine-driven selection, style, live snapshot
+- **NotchWindowEngine** — borderless notch panel with hover expand (AppKit)
+- **AppState** — Combine-driven selection, style, placement, live snapshot
 
 ## Project layout
 

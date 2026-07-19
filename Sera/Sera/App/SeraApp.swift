@@ -3,10 +3,18 @@ import SwiftUI
 @main
 struct SeraApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var appState = AppState()
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarScene(appState: appDelegate.appState)
+    }
+}
+
+/// Isolated so `@ObservedObject` can react to `displayMode` and toggle the status item.
+private struct MenuBarScene: Scene {
+    @ObservedObject var appState: AppState
+
+    var body: some Scene {
+        MenuBarExtra(isInserted: menuBarInserted) {
             MenuBarPanelView()
                 .environmentObject(appState)
                 .tint(SeraTheme.progress)
@@ -15,5 +23,18 @@ struct SeraApp: App {
                 .environmentObject(appState)
         }
         .menuBarExtraStyle(.window)
+    }
+
+    private var menuBarInserted: Binding<Bool> {
+        Binding(
+            get: { appState.displayMode.showsMenuBar },
+            set: { show in
+                if show {
+                    appState.setDisplayMode(appState.displayMode == .notch ? .both : .menuBar)
+                } else {
+                    appState.setDisplayMode(.notch)
+                }
+            }
+        )
     }
 }
