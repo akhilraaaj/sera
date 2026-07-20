@@ -29,11 +29,7 @@ private struct MenuBarScene: Scene {
         Binding(
             get: { appState.displayMode.showsMenuBar },
             set: { show in
-                if show {
-                    appState.setDisplayMode(appState.displayMode == .notch ? .both : .menuBar)
-                } else {
-                    appState.setDisplayMode(.notch)
-                }
+                appState.setDisplayMode(show ? .menuBar : .notch)
             }
         )
     }

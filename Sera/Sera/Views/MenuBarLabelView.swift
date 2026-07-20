@@ -92,7 +92,9 @@ private struct MenuBarGlyphArtwork: View {
             case .ring:
                 ringGlyph
             case .gauge:
+                // Less padding so the semicircle can match ring/grid weight.
                 gaugeGlyph
+                    .padding(-1)
             case .linear:
                 linearGlyph
             case .grid:
@@ -128,14 +130,63 @@ private struct MenuBarGlyphArtwork: View {
     }
 
     private var gaugeGlyph: some View {
-        ZStack {
-            GaugeArcShape()
-                .stroke(Color.primary.opacity(0.30), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+        // Segmented semicircle sized to fill the 18pt slot like ring/grid,
+        // with its visual center aligned to the adjacent percent text.
+        Canvas { context, size in
+            let count = 7
+            let filled = Int((clamped * Double(count)).rounded())
 
-            GaugeArcShape(progress: clamped)
-                .stroke(SeraTheme.progress, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+            let side = min(size.width, size.height)
+            let blockLength = side * 0.34
+            let margin: CGFloat = 0.35
+
+            // Use nearly the full icon width for diameter.
+            let outerExtent = min(size.width * 0.5 - margin, size.height - margin)
+            let radius = max(5, outerExtent - blockLength * 0.5)
+
+            // Center the semicircle’s bounding box in the icon.
+            let visualTop = -(radius + blockLength * 0.5)
+            let visualBottom = blockLength * 0.35
+            let visualMid = (visualTop + visualBottom) * 0.5
+            let center = CGPoint(
+                x: size.width * 0.5,
+                y: size.height * 0.5 - visualMid
+            )
+
+            let startAngle = Double.pi
+            let span = Double.pi
+            let slotWidth = CGFloat(span / Double(count)) * radius
+            let blockWidth = max(1.6, slotWidth * 0.82)
+            let corner = blockWidth * 0.35
+
+            for index in 0..<count {
+                let t = (Double(index) + 0.5) / Double(count)
+                let angle = startAngle - t * span
+                let mid = CGPoint(
+                    x: center.x + CGFloat(cos(angle)) * radius,
+                    y: center.y - CGFloat(sin(angle)) * radius
+                )
+                let rotation = Double.pi / 2 - angle
+                let active = index < filled
+                let rect = CGRect(
+                    x: -blockWidth * 0.5,
+                    y: -blockLength * 0.5,
+                    width: blockWidth,
+                    height: blockLength
+                )
+                let path = Path(roundedRect: rect, cornerRadius: corner)
+
+                context.drawLayer { layer in
+                    layer.translateBy(x: mid.x, y: mid.y)
+                    layer.rotate(by: .radians(rotation))
+                    layer.fill(
+                        path,
+                        with: .color(active ? SeraTheme.progress : Color.primary.opacity(0.30))
+                    )
+                }
+            }
         }
-        .padding(.top, 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var linearGlyph: some View {
@@ -165,19 +216,5 @@ private struct MenuBarGlyphArtwork: View {
                 }
             }
         }
-    }
-}
-
-private struct GaugeArcShape: Shape {
-    var progress: Double = 1
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let center = CGPoint(x: rect.midX, y: rect.maxY - 0.5)
-        let radius = min(rect.width, rect.height) * 0.52
-        let start = Angle.degrees(180)
-        let end = Angle.degrees(180 - 180 * min(1, max(0, progress)))
-        path.addArc(center: center, radius: radius, startAngle: start, endAngle: end, clockwise: true)
-        return path
     }
 }

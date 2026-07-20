@@ -188,8 +188,6 @@ struct GoalSelectorPanel: View {
             return "Click the menu bar item for the glass panel."
         case .notch:
             return "Hover the notch island to expand. Works best on notched MacBooks."
-        case .both:
-            return "Menu bar item plus a notch island that expands on hover."
         }
     }
 

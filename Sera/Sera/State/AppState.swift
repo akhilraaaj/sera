@@ -194,9 +194,14 @@ final class AppState: ObservableObject {
             visualizationStyle = style
         }
 
-        if let raw = UserDefaults.standard.string(forKey: displayModeKey),
-           let mode = DisplayMode(rawValue: raw) {
-            displayMode = mode
+        if let raw = UserDefaults.standard.string(forKey: displayModeKey) {
+            if raw == "both" {
+                // Former combined mode — prefer notch.
+                displayMode = .notch
+                UserDefaults.standard.set(DisplayMode.notch.rawValue, forKey: displayModeKey)
+            } else if let mode = DisplayMode(rawValue: raw) {
+                displayMode = mode
+            }
         }
 
         if let raw = UserDefaults.standard.string(forKey: selectionKey) {
