@@ -28,8 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func syncNotch(for mode: DisplayMode) {
         if mode.showsNotch {
-            if notchEngine == nil {
-                notchEngine = NotchWindowEngine(appState: appState)
+            guard notchEngine == nil else { return }
+            // Let MenuBarExtra finish removing before the island appears —
+            // same quiet handoff as notch → menu bar (destroy, then show).
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard self.appState.displayMode.showsNotch, self.notchEngine == nil else { return }
+                self.notchEngine = NotchWindowEngine(appState: self.appState)
             }
         } else {
             notchEngine?.destroy()

@@ -75,8 +75,17 @@ final class AppState: ObservableObject {
     func setDisplayMode(_ mode: DisplayMode) {
         guard mode != displayMode else { return }
         Task { @MainActor in
+            // Close Timelines before swapping shells so the notch does not
+            // spawn mid-panel and animate expand on first frame (glitchy).
+            isPanelOpen = false
+            if mode.showsNotch {
+                isNotchExpanded = false
+            }
+
             displayMode = mode
             UserDefaults.standard.set(mode.rawValue, forKey: displayModeKey)
+
+            // Match prior notch → menu bar handoff: tear down first, then clear.
             if !mode.showsNotch {
                 isNotchExpanded = false
             }

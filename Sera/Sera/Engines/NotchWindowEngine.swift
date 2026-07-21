@@ -17,6 +17,7 @@ final class NotchWindowEngine {
     private var screenObserver: NSObjectProtocol?
     private var cancellables = Set<AnyCancellable>()
     private var collapseWorkItem: DispatchWorkItem?
+    private var ignoreHoverUntil: Date = .distantPast
 
     private let expandedSize = CGSize(width: 560, height: 240)
     private let collapsedShoulderWidth: CGFloat = 58
@@ -56,10 +57,15 @@ final class NotchWindowEngine {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.ignoresMouseEvents = false
-        panel.animationBehavior = .utilityWindow
+        // Avoid AppKit window chrome animations when the island is created/shown.
+        panel.animationBehavior = .none
 
         applyFrame(expanded: false, animate: false)
         panel.orderFrontRegardless()
+
+        // Ignore hover briefly so a cursor near the menu bar does not expand
+        // the island in the same beat it appears (menu bar → notch handoff).
+        ignoreHoverUntil = Date().addingTimeInterval(0.5)
 
         menuBarAppearance.start()
 
@@ -154,6 +160,8 @@ final class NotchWindowEngine {
     }
 
     private func handleMouse(_ event: NSEvent) {
+        guard Date() >= ignoreHoverUntil else { return }
+
         let point = NSEvent.mouseLocation
         let hitExpanded = panel.frame.insetBy(dx: -6, dy: -6).contains(point)
 
@@ -202,8 +210,11 @@ final class NotchWindowEngine {
     // MARK: - Observation
 
     private func observeState() {
+        // dropFirst: init already applied the collapsed frame. Re-applying the
+        // current value with animate:true is what made menu bar → notch glitchy.
         appState.$isNotchExpanded
             .removeDuplicates()
+            .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] expanded in
                 self?.applyFrame(expanded: expanded || (self?.appState.isPanelOpen ?? false), animate: true)
@@ -212,6 +223,7 @@ final class NotchWindowEngine {
 
         appState.$isPanelOpen
             .removeDuplicates()
+            .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] open in
                 guard let self else { return }
@@ -227,12 +239,14 @@ final class NotchWindowEngine {
 
         appState.$displayMode
             .removeDuplicates()
+            .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] mode in
                 if mode.showsNotch {
                     self?.panel.orderFrontRegardless()
                     self?.applyFrame(
-                        expanded: self?.appState.isNotchExpanded == true,
+                        expanded: self?.appState.isNotchExpanded == true
+                            || self?.appState.isPanelOpen == true,
                         animate: false
                     )
                 } else {
