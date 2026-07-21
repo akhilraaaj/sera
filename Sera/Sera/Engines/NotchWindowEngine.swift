@@ -18,8 +18,8 @@ final class NotchWindowEngine {
     private var cancellables = Set<AnyCancellable>()
     private var collapseWorkItem: DispatchWorkItem?
 
-    private let expandedSize = CGSize(width: 420, height: 224)
-    private let panelOpenSize = CGSize(width: 420, height: 430)
+    private let expandedSize = CGSize(width: 560, height: 240)
+    private let panelOpenSize = CGSize(width: 560, height: 460)
     private let collapsedShoulderWidth: CGFloat = 58
     private let hoverCollapseDelay: TimeInterval = 0.34
     /// Keep the island centered on the notch so it does not slide over

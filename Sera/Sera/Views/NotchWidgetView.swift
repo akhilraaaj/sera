@@ -95,7 +95,7 @@ struct NotchWidgetView: View {
 
     private var dashboard: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 26) {
+            HStack(alignment: .center, spacing: 32) {
                 progressSummary
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -103,15 +103,15 @@ struct NotchWidgetView: View {
                     progress: appState.snapshot.progress,
                     style: appState.visualizationStyle
                 )
-                .frame(width: 150, height: 108)
+                .frame(width: 210, height: 132)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .padding(.horizontal, 28)
-            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, 36)
+            .frame(maxHeight: .infinity, alignment: .center)
 
             bottomBar
-                .padding(.horizontal, 28)
-                .padding(.bottom, 16)
+                .padding(.horizontal, 36)
+                .padding(.bottom, 18)
         }
     }
 
@@ -318,19 +318,19 @@ private struct NotchVisualization: View {
                     showsLabel: false,
                     compact: true
                 )
-                .frame(width: 96, height: 96)
+                .frame(width: 124, height: 124)
 
             case .gauge:
                 compactGauge
-                    .frame(width: 148, height: 88)
+                    .frame(width: 196, height: 114)
 
             case .linear:
                 compactLinear
-                    .frame(width: 136, height: 38)
+                    .frame(width: 180, height: 48)
 
             case .grid:
                 compactGrid
-                    .frame(width: 126, height: 76)
+                    .frame(width: 168, height: 100)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -343,25 +343,25 @@ private struct NotchVisualization: View {
         ZStack {
             SegmentedSemicircleGauge(
                 progress: clamped,
-                segmentCount: 11
+                segmentCount: 13
             )
-            .frame(width: 148, height: 88)
+            .frame(width: 196, height: 114)
 
             Text(String(format: "%.0f%%", clamped * 100))
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.primary.opacity(0.9))
-                .offset(y: 18)
+                .offset(y: 22)
         }
-        .frame(width: 148, height: 88, alignment: .top)
+        .frame(width: 196, height: 114, alignment: .top)
     }
 
     private var compactLinear: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<8, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
+        HStack(spacing: 6) {
+            ForEach(0..<9, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                     .fill(
-                        Double(index) < clamped * 8
+                        Double(index) < clamped * 9
                             ? SeraTheme.progress
                             : Color.primary.opacity(0.14)
                     )
@@ -370,8 +370,8 @@ private struct NotchVisualization: View {
     }
 
     private var compactGrid: some View {
-        let columns = 8
-        let rows = 4
+        let columns = 9
+        let rows = 5
         let filled = Int((clamped * Double(columns * rows)).rounded())
 
         return VStack(spacing: 6) {
