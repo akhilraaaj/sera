@@ -84,8 +84,38 @@ struct ExpandedPanelView: View {
 
 struct GoalSelectorPanel: View {
     @EnvironmentObject private var appState: AppState
+    /// Tighter chrome for the fixed-height notch shell.
+    var compact: Bool = false
 
     var body: some View {
+        Group {
+            if compact {
+                compactBody
+            } else {
+                standardBody
+            }
+        }
+    }
+
+    /// Notch: This Year / goals on the left, Style / Placement / Done on the right.
+    private var compactBody: some View {
+        HStack(alignment: .top, spacing: 24) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Timelines")
+                    .font(.system(size: 12, weight: .semibold))
+
+                timelineList
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            settingsColumn
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var standardBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Timelines")
                 .font(.system(size: 13, weight: .semibold))
@@ -93,92 +123,108 @@ struct GoalSelectorPanel: View {
                 .padding(.top, 14)
                 .padding(.bottom, 8)
 
-            ScrollView {
-                VStack(spacing: 4) {
-                    selectorRow(
-                        title: YearTimeline.shared.title,
-                        subtitle: appState.selection == .year ? appState.snapshot.percentDisplay : "Year countdown",
-                        selected: appState.selection == .year
-                    ) {
-                        appState.selectYear()
-                    }
-
-                    if appState.goalEngine.goals.isEmpty {
-                        Text("No goals yet. Coming in future updates.")
-                            .font(.system(size: 11, weight: .regular))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        ForEach(appState.goalEngine.goals) { goal in
-                            let snap = appState.goalEngine.snapshot(for: goal)
-                            selectorRow(
-                                title: goal.title,
-                                subtitle: snap.percentDisplay,
-                                selected: appState.selection == .goal(goal.id)
-                            ) {
-                                appState.selectGoal(id: goal.id)
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 8)
-            }
+            timelineList
+                .frame(maxHeight: .infinity, alignment: .top)
 
             Divider().opacity(0.3)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Style")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+            settingsColumn
+                .padding(14)
+        }
+    }
 
-                Picker(
-                    "Style",
-                    selection: Binding(
-                        get: { appState.visualizationStyle },
-                        set: { appState.setVisualizationStyle($0) }
-                    )
-                ) {
-                    ForEach(VisualizationStyle.allCases) { style in
-                        Text(style.displayName).tag(style)
-                    }
+    private var settingsColumn: some View {
+        VStack(alignment: .leading, spacing: compact ? 6 : 8) {
+            Text("Style")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Picker(
+                "Style",
+                selection: Binding(
+                    get: { appState.visualizationStyle },
+                    set: { appState.setVisualizationStyle($0) }
+                )
+            ) {
+                ForEach(VisualizationStyle.allCases) { style in
+                    Text(style.displayName).tag(style)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
-                Text("Placement")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
+            Text("Placement")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.top, compact ? 2 : 4)
 
-                Picker(
-                    "Placement",
-                    selection: Binding(
-                        get: { appState.displayMode },
-                        set: { appState.setDisplayMode($0) }
-                    )
-                ) {
-                    ForEach(DisplayMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
+            Picker(
+                "Placement",
+                selection: Binding(
+                    get: { appState.displayMode },
+                    set: { appState.setDisplayMode($0) }
+                )
+            ) {
+                ForEach(DisplayMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
+            if !compact {
                 Text(placementHint)
                     .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
 
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer(minLength: 0)
                 Button("Done") {
                     appState.closeTimelines()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(SeraTheme.progress)
                 .controlSize(.small)
-                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .padding(14)
+        }
+    }
+
+    private var timelineList: some View {
+        ScrollView {
+            VStack(spacing: 4) {
+                selectorRow(
+                    title: YearTimeline.shared.title,
+                    subtitle: appState.selection == .year ? appState.snapshot.percentDisplay : "Year countdown",
+                    selected: appState.selection == .year
+                ) {
+                    appState.selectYear()
+                }
+
+                if appState.goalEngine.goals.isEmpty {
+                    Text("No goals yet. Coming in future updates.")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, compact ? 2 : 14)
+                        .padding(.vertical, compact ? 6 : 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    ForEach(appState.goalEngine.goals) { goal in
+                        let snap = appState.goalEngine.snapshot(for: goal)
+                        selectorRow(
+                            title: goal.title,
+                            subtitle: snap.percentDisplay,
+                            selected: appState.selection == .goal(goal.id)
+                        ) {
+                            appState.selectGoal(id: goal.id)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, compact ? 0 : 8)
         }
     }
 

@@ -80,15 +80,17 @@ struct NotchWidgetView: View {
             Color.clear
                 .frame(height: 43)
 
-            if appState.isPanelOpen {
-                GoalSelectorPanel()
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 18)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            } else {
-                dashboard
-                    .transition(.opacity)
+            Group {
+                if appState.isPanelOpen {
+                    GoalSelectorPanel(compact: true)
+                        .padding(.horizontal, 36)
+                        .padding(.bottom, 18)
+                } else {
+                    dashboard
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .clipped()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }

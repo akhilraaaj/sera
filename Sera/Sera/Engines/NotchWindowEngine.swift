@@ -19,7 +19,6 @@ final class NotchWindowEngine {
     private var collapseWorkItem: DispatchWorkItem?
 
     private let expandedSize = CGSize(width: 560, height: 240)
-    private let panelOpenSize = CGSize(width: 560, height: 460)
     private let collapsedShoulderWidth: CGFloat = 58
     private let hoverCollapseDelay: TimeInterval = 0.34
     /// Keep the island centered on the notch so it does not slide over
@@ -97,7 +96,7 @@ final class NotchWindowEngine {
 
         let target: NSRect
         if expanded {
-            let preferredSize = appState.isPanelOpen ? panelOpenSize : expandedSize
+            let preferredSize = expandedSize
             let size = CGSize(
                 width: min(preferredSize.width, info.screen.frame.width - 40),
                 height: preferredSize.height
@@ -114,6 +113,13 @@ final class NotchWindowEngine {
             )
         }
         panel.hasShadow = false
+
+        // Avoid a no-op animate that still flickers when Timelines opens.
+        if panel.frame.equalTo(target),
+           hostingView.frame.size == target.size {
+            return
+        }
+
         hostingView.frame = NSRect(origin: .zero, size: target.size)
 
         if animate {
@@ -211,12 +217,11 @@ final class NotchWindowEngine {
                 guard let self else { return }
                 if open {
                     self.cancelScheduledCollapse()
-                    self.appState.setNotchExpanded(true)
+                    // Stay at the same expanded frame — only content swaps.
+                    if !self.appState.isNotchExpanded {
+                        self.appState.setNotchExpanded(true)
+                    }
                 }
-                self.applyFrame(
-                    expanded: self.appState.isNotchExpanded || open,
-                    animate: true
-                )
             }
             .store(in: &cancellables)
 
