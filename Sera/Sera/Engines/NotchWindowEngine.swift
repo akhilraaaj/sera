@@ -4,24 +4,32 @@ import QuartzCore
 import SwiftUI
 
 /// Borderless panel that mirrors the Mac notch as a Dynamic Island–style widget.
-/// Collapsed to notch width by default; expands on hover (BoringNotch pattern).
+/// Window stays top-pinned at expanded size; SwiftUI morphs the island clip
+/// between idle and expanded so hover never opens a gap under the menu bar.
 @MainActor
 final class NotchWindowEngine {
     private let panel: NSPanel
     private let hostingView: NSHostingView<AnyView>
     private let appState: AppState
-    private let menuBarAppearance = MenuBarAppearance()
+    private let notchLayout = NotchLayout()
 
     private var mouseMonitor: Any?
     private var localMonitor: Any?
     private var screenObserver: NSObjectProtocol?
+    private var spaceObserver: NSObjectProtocol?
     private var cancellables = Set<AnyCancellable>()
     private var collapseWorkItem: DispatchWorkItem?
+    private var expandWorkItem: DispatchWorkItem?
+    private var spaceExpandWorkItem: DispatchWorkItem?
     private var ignoreHoverUntil: Date = .distantPast
 
-    private let expandedSize = CGSize(width: 560, height: 240)
-    private let collapsedShoulderWidth: CGFloat = 58
-    private let hoverCollapseDelay: TimeInterval = 0.34
+    private let expandedSize = CGSize(width: 560, height: 210)
+    /// Shoulder width beside the camera cutout — leaves room for progress /
+    /// percent inside the idle ear + bottom-corner silhouette.
+    private let collapsedShoulderWidth: CGFloat = 64
+    /// Brief pause before morphing so hover/leave feel intentional, not jumpy.
+    private let hoverExpandDelay: TimeInterval = 0.1
+    private let hoverCollapseDelay: TimeInterval = 0.42
     /// Keep the island centered on the notch so it does not slide over
     /// neighboring menu-bar items while expanding.
     private let expandedHorizontalOffset: CGFloat = 0
@@ -31,11 +39,11 @@ final class NotchWindowEngine {
 
         let root = NotchWidgetView()
             .environmentObject(appState)
-            .environmentObject(menuBarAppearance)
+            .environmentObject(notchLayout)
             .tint(SeraTheme.progress)
 
         hostingView = NSHostingView(rootView: AnyView(root))
-        hostingView.frame = NSRect(origin: .zero, size: CGSize(width: 180, height: 34))
+        hostingView.frame = NSRect(origin: .zero, size: expandedSize)
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         hostingView.autoresizingMask = [.width, .height]
@@ -56,27 +64,28 @@ final class NotchWindowEngine {
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.ignoresMouseEvents = false
+        // Idle: clicks pass through the transparent chrome; hover uses monitors.
+        panel.ignoresMouseEvents = true
         // Avoid AppKit window chrome animations when the island is created/shown.
         panel.animationBehavior = .none
 
-        applyFrame(expanded: false, animate: false)
+        applyWindowFrame()
         panel.orderFrontRegardless()
 
         // Ignore hover briefly so a cursor near the menu bar does not expand
         // the island in the same beat it appears (menu bar → notch handoff).
         ignoreHoverUntil = Date().addingTimeInterval(0.5)
 
-        menuBarAppearance.start()
-
         startMouseTracking()
         observeState()
         observeScreens()
+        observeSpaceChanges()
     }
 
     func destroy() {
         collapseWorkItem?.cancel()
-        menuBarAppearance.stop()
+        expandWorkItem?.cancel()
+        spaceExpandWorkItem?.cancel()
         if let mouseMonitor {
             NSEvent.removeMonitor(mouseMonitor)
         }
@@ -86,9 +95,13 @@ final class NotchWindowEngine {
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
         }
+        if let spaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver)
+        }
         mouseMonitor = nil
         localMonitor = nil
         screenObserver = nil
+        spaceObserver = nil
         cancellables.removeAll()
         appState.setNotchExpanded(false)
         panel.orderOut(nil)
@@ -97,54 +110,36 @@ final class NotchWindowEngine {
 
     // MARK: - Layout
 
-    private func applyFrame(expanded: Bool, animate: Bool) {
+    /// Panel always uses the expanded frame (top-pinned). Idle vs hover is a
+    /// SwiftUI clip morph — no window height animation, so no menubar gap.
+    private func applyWindowFrame() {
         guard let info = NotchGeometry.info() else { return }
 
-        let target: NSRect
-        if expanded {
-            let preferredSize = expandedSize
-            let size = CGSize(
-                width: min(preferredSize.width, info.screen.frame.width - 40),
-                height: preferredSize.height
-            )
-            target = NotchGeometry.expandedFrame(
-                info: info,
-                size: size,
-                horizontalOffset: expandedHorizontalOffset
-            )
-        } else {
-            target = NotchGeometry.collapsedFrame(
-                info: info,
-                horizontalPadding: collapsedShoulderWidth
-            )
-        }
+        let idle = NotchGeometry.collapsedFrame(
+            info: info,
+            horizontalPadding: collapsedShoulderWidth
+        )
+        notchLayout.idleSize = idle.size
+
+        let size = CGSize(
+            width: min(expandedSize.width, info.screen.frame.width - 40),
+            height: expandedSize.height
+        )
+        let target = NotchGeometry.expandedFrame(
+            info: info,
+            size: size,
+            horizontalOffset: expandedHorizontalOffset
+        )
+
         panel.hasShadow = false
-
-        // Avoid a no-op animate that still flickers when Timelines opens.
-        if panel.frame.equalTo(target),
-           hostingView.frame.size == target.size {
-            return
-        }
-
+        panel.setFrame(target, display: true)
         hostingView.frame = NSRect(origin: .zero, size: target.size)
+        updateMouseEventPassthrough()
+    }
 
-        if animate {
-            // Keep the top edge pinned and grow downward / outward — matches
-            // the SwiftUI clip morph timing curve.
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.42
-                context.timingFunction = CAMediaTimingFunction(
-                    controlPoints: 0.16,
-                    1.0,
-                    0.30,
-                    1.0
-                )
-                context.allowsImplicitAnimation = true
-                panel.animator().setFrame(target, display: true)
-            }
-        } else {
-            panel.setFrame(target, display: true)
-        }
+    private func updateMouseEventPassthrough() {
+        let interactive = appState.isNotchExpanded || appState.isPanelOpen
+        panel.ignoresMouseEvents = !interactive
     }
 
     // MARK: - Hover
@@ -163,30 +158,59 @@ final class NotchWindowEngine {
         guard Date() >= ignoreHoverUntil else { return }
 
         let point = NSEvent.mouseLocation
-        let hitExpanded = panel.frame.insetBy(dx: -6, dy: -6).contains(point)
+        let open = appState.isNotchExpanded || appState.isPanelOpen
 
-        // Also treat the physical notch band as a hover target while collapsed,
-        // so moving onto the notch (even slightly outside the panel) expands.
-        let hitNotch: Bool
-        if let info = NotchGeometry.info() {
-            let band = NotchGeometry.collapsedFrame(
+        let hit: Bool
+        if open {
+            hit = panel.frame.insetBy(dx: -6, dy: -6).contains(point)
+        } else if let info = NotchGeometry.info() {
+            // Only the idle island / notch band — not the full transparent window.
+            hit = NotchGeometry.collapsedFrame(
                 info: info,
                 horizontalPadding: collapsedShoulderWidth
             )
             .insetBy(dx: -10, dy: -4)
-            hitNotch = band.contains(point)
+            .contains(point)
         } else {
-            hitNotch = false
+            hit = false
         }
 
-        if hitExpanded || hitNotch {
+        if hit {
             cancelScheduledCollapse()
             if !appState.isNotchExpanded {
-                appState.setNotchExpanded(true)
+                scheduleExpand()
             }
-        } else if appState.isNotchExpanded, !appState.isPanelOpen {
-            scheduleCollapse()
+        } else {
+            cancelScheduledExpand()
+            if appState.isNotchExpanded, !appState.isPanelOpen {
+                scheduleCollapse()
+            }
         }
+    }
+
+    private func scheduleExpand() {
+        guard expandWorkItem == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.expandWorkItem = nil
+            let point = NSEvent.mouseLocation
+            guard let info = NotchGeometry.info() else { return }
+            let idleHit = NotchGeometry.collapsedFrame(
+                info: info,
+                horizontalPadding: self.collapsedShoulderWidth
+            )
+            .insetBy(dx: -10, dy: -4)
+            .contains(point)
+            guard idleHit else { return }
+            self.appState.setNotchExpanded(true)
+        }
+        expandWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + hoverExpandDelay, execute: work)
+    }
+
+    private func cancelScheduledExpand() {
+        expandWorkItem?.cancel()
+        expandWorkItem = nil
     }
 
     private func scheduleCollapse() {
@@ -210,14 +234,12 @@ final class NotchWindowEngine {
     // MARK: - Observation
 
     private func observeState() {
-        // dropFirst: init already applied the collapsed frame. Re-applying the
-        // current value with animate:true is what made menu bar → notch glitchy.
         appState.$isNotchExpanded
             .removeDuplicates()
             .dropFirst()
             .receive(on: RunLoop.main)
-            .sink { [weak self] expanded in
-                self?.applyFrame(expanded: expanded || (self?.appState.isPanelOpen ?? false), animate: true)
+            .sink { [weak self] _ in
+                self?.updateMouseEventPassthrough()
             }
             .store(in: &cancellables)
 
@@ -229,11 +251,11 @@ final class NotchWindowEngine {
                 guard let self else { return }
                 if open {
                     self.cancelScheduledCollapse()
-                    // Stay at the same expanded frame — only content swaps.
                     if !self.appState.isNotchExpanded {
                         self.appState.setNotchExpanded(true)
                     }
                 }
+                self.updateMouseEventPassthrough()
             }
             .store(in: &cancellables)
 
@@ -244,11 +266,7 @@ final class NotchWindowEngine {
             .sink { [weak self] mode in
                 if mode.showsNotch {
                     self?.panel.orderFrontRegardless()
-                    self?.applyFrame(
-                        expanded: self?.appState.isNotchExpanded == true
-                            || self?.appState.isPanelOpen == true,
-                        animate: false
-                    )
+                    self?.applyWindowFrame()
                 } else {
                     self?.panel.orderOut(nil)
                 }
@@ -264,12 +282,70 @@ final class NotchWindowEngine {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.menuBarAppearance.refresh()
-                self.applyFrame(
-                    expanded: self.appState.isNotchExpanded || self.appState.isPanelOpen,
-                    animate: false
-                )
+                self.applyWindowFrame()
             }
         }
+    }
+
+    /// Mission Control / desktop swipe / Cmd-Tab back to a space: snap to idle
+    /// first, then morph open if the cursor sits on the notch so expand stays smooth.
+    private func observeSpaceChanges() {
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleDesktopOrSpaceBecameVisible()
+            }
+        }
+    }
+
+    private func handleDesktopOrSpaceBecameVisible() {
+        applyWindowFrame()
+        panel.orderFrontRegardless()
+
+        // Timelines stays open across spaces — don't interrupt it.
+        guard !appState.isPanelOpen else {
+            updateMouseEventPassthrough()
+            return
+        }
+
+        cancelScheduledExpand()
+        cancelScheduledCollapse()
+        spaceExpandWorkItem?.cancel()
+
+        // Allow hover immediately after a space switch.
+        ignoreHoverUntil = .distantPast
+
+        // Always return to idle first so a follow-up expand can play the morph
+        // (avoids appearing already-open when landing on the desktop).
+        if appState.isNotchExpanded {
+            appState.setNotchExpanded(false)
+        }
+        updateMouseEventPassthrough()
+
+        guard isMouseOverIdleNotch() else { return }
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.spaceExpandWorkItem = nil
+            guard !self.appState.isPanelOpen else { return }
+            guard self.isMouseOverIdleNotch() else { return }
+            self.appState.setNotchExpanded(true)
+        }
+        spaceExpandWorkItem = work
+        // Brief beat so SwiftUI commits the idle clip before expanding.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+
+    private func isMouseOverIdleNotch() -> Bool {
+        guard let info = NotchGeometry.info() else { return false }
+        return NotchGeometry.collapsedFrame(
+            info: info,
+            horizontalPadding: collapsedShoulderWidth
+        )
+        .insetBy(dx: -10, dy: -4)
+        .contains(NSEvent.mouseLocation)
     }
 }

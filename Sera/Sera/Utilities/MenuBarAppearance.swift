@@ -1,42 +1,11 @@
-import AppKit
 import Combine
-import SwiftUI
+import CoreGraphics
+import Foundation
 
-/// Appearance-only menu-bar tint — no screen capture / extra permissions.
-/// Dark → black (matches typical opaque dark menu bar); light → light chrome.
+/// Idle island size inside the always-expanded notch window.
+/// The panel stays top-pinned; SwiftUI morphs the clip between this size and
+/// the full window so hover-expand never opens a gap under the menu bar.
 @MainActor
-final class MenuBarAppearance: ObservableObject {
-    @Published private(set) var background: Color = .black
-    @Published private(set) var colorScheme: ColorScheme = .dark
-
-    private var observer: NSObjectProtocol?
-
-    func start() {
-        refresh()
-        observer = DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-    }
-
-    func stop() {
-        if let observer {
-            DistributedNotificationCenter.default().removeObserver(observer)
-        }
-        observer = nil
-    }
-
-    func refresh() {
-        let match = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
-        if match == .darkAqua {
-            background = .black
-            colorScheme = .dark
-        } else {
-            background = Color(red: 0.93, green: 0.93, blue: 0.94)
-            colorScheme = .light
-        }
-    }
+final class NotchLayout: ObservableObject {
+    @Published var idleSize: CGSize = CGSize(width: 300, height: 37)
 }

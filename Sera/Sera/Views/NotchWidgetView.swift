@@ -5,16 +5,24 @@ import SwiftUI
 /// the shell into the wide, bottom-rounded dashboard.
 struct NotchWidgetView: View {
     @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var menuBarAppearance: MenuBarAppearance
+    @EnvironmentObject private var notchLayout: NotchLayout
     @State private var revealsExpandedContent = false
 
     private var expanded: Bool {
         appState.isNotchExpanded || appState.isPanelOpen
     }
 
+    private var islandShape: NotchIslandShape {
+        NotchIslandShape(
+            expansion: expanded ? 1 : 0,
+            idleSize: notchLayout.idleSize
+        )
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
-            menuBarAppearance.background
+            // Match the hardware notch — always opaque black.
+            Color.black
 
             if expanded {
                 expandedContent
@@ -22,19 +30,20 @@ struct NotchWidgetView: View {
                     .offset(y: revealsExpandedContent ? 0 : -4)
             } else {
                 collapsedContent
+                    .frame(width: notchLayout.idleSize.width, height: notchLayout.idleSize.height)
+                    .frame(maxWidth: .infinity, alignment: .top)
                     .transition(.opacity)
             }
         }
-        .environment(\.colorScheme, menuBarAppearance.colorScheme)
-        .clipShape(NotchIslandShape(expansion: expanded ? 1 : 0))
-        .contentShape(NotchIslandShape(expansion: expanded ? 1 : 0))
+        .environment(\.colorScheme, .dark)
+        .clipShape(islandShape)
+        .contentShape(islandShape)
         .animation(notchSpring, value: expanded)
-        .animation(.easeInOut(duration: 0.25), value: menuBarAppearance.colorScheme)
         .animation(.easeOut(duration: 0.18), value: revealsExpandedContent)
         .onChange(of: expanded) { isExpanded in
             if isExpanded {
                 revealsExpandedContent = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
                     guard expanded else { return }
                     revealsExpandedContent = true
                 }
@@ -45,26 +54,30 @@ struct NotchWidgetView: View {
     }
 
     private var notchSpring: Animation {
-        .timingCurve(0.16, 1.0, 0.3, 1.0, duration: 0.42)
+        .timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.55)
     }
 
     // MARK: - Collapsed
 
-    /// Progress sits on the two visible shoulders beside the physical notch.
+    /// Progress sits on the two visible shoulders beside the physical notch,
+    /// inset enough to clear the concave ears and soft bottom corners.
     private var collapsedContent: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
             CompactProgressBar(progress: appState.snapshot.progress)
-                .frame(width: 42, height: 4)
+                .frame(width: 44, height: 4)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 12)
 
             Text(appState.snapshot.percentWhole)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.primary.opacity(0.78))
-                .frame(width: 42, alignment: .trailing)
+                .frame(width: 40, alignment: .trailing)
         }
-        .padding(.horizontal, 10)
+        // Clears idle ear inset (~6) + a little breathing room inside the curve.
+        .padding(.leading, 14)
+        .padding(.trailing, 14)
+        .padding(.bottom, 3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(appState.displayTitle) progress")
@@ -78,13 +91,13 @@ struct NotchWidgetView: View {
             // Keeps content below the camera/notch while the panel remains
             // physically attached to the top edge of the display.
             Color.clear
-                .frame(height: 43)
+                .frame(height: 38)
 
             Group {
                 if appState.isPanelOpen {
                     GoalSelectorPanel(compact: true)
                         .padding(.horizontal, 36)
-                        .padding(.bottom, 18)
+                        .padding(.bottom, 14)
                 } else {
                     dashboard
                 }
@@ -105,7 +118,7 @@ struct NotchWidgetView: View {
                     progress: appState.snapshot.progress,
                     style: appState.visualizationStyle
                 )
-                .frame(width: 210, height: 132)
+                .frame(width: 190, height: 112)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .padding(.horizontal, 36)
@@ -113,7 +126,7 @@ struct NotchWidgetView: View {
 
             bottomBar
                 .padding(.horizontal, 36)
-                .padding(.bottom, 18)
+                .padding(.bottom, 14)
         }
     }
 
@@ -232,11 +245,14 @@ private struct NotchToolbarButtonStyle: ButtonStyle {
     }
 }
 
-/// Collapsed: capsule over the notch.
-/// Expanded: flat top flush with the menu bar (no top radius — avoids covering
-/// neighboring menu-bar items) and soft rounded bottom corners.
+/// Mac-notch silhouette morphing inside a fixed, top-pinned window.
+///
+/// `expansion == 0` draws the idle island (centered, menu-bar height).
+/// `expansion == 1` fills the window with the hover dashboard silhouette.
+/// Soft bottom corners and concave top ears stay for the whole morph.
 private struct NotchIslandShape: Shape {
     var expansion: CGFloat
+    var idleSize: CGSize
 
     var animatableData: CGFloat {
         get { expansion }
@@ -245,56 +261,64 @@ private struct NotchIslandShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         let amount = min(1, max(0, expansion))
-        let collapsedRadius = min(rect.height, rect.width) / 2
-        // Drop top radius quickly so the open island never scoops into menu items.
-        let topRadius = collapsedRadius * (1 - amount) * (1 - amount)
-        let bottomRadius = collapsedRadius + (24 - collapsedRadius) * amount
+        let idleWidth = min(idleSize.width, rect.width)
+        let idleHeight = min(idleSize.height, rect.height)
+        let width = idleWidth + (rect.width - idleWidth) * amount
+        let height = idleHeight + (rect.height - idleHeight) * amount
+        let island = CGRect(
+            x: rect.midX - width / 2,
+            y: rect.minY,
+            width: width,
+            height: height
+        )
+
+        let idealTop = 6 + (10 - 6) * amount
+        let idealBottom = 12 + (24 - 12) * amount
+        let topCornerRadius = min(idealTop, max(0, island.height * 0.28))
+        let bottomCornerRadius = min(
+            max(idealBottom, min(12, island.height * 0.36)),
+            max(0, island.height - topCornerRadius - 1)
+        )
 
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX + topRadius, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - topRadius, y: rect.minY))
 
-        if topRadius > 0.5 {
-            path.addArc(
-                center: CGPoint(x: rect.maxX - topRadius, y: rect.minY + topRadius),
-                radius: topRadius,
-                startAngle: .degrees(-90),
-                endAngle: .degrees(0),
-                clockwise: false
-            )
-        } else {
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        }
-
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomRadius))
-        path.addArc(
-            center: CGPoint(x: rect.maxX - bottomRadius, y: rect.maxY - bottomRadius),
-            radius: bottomRadius,
-            startAngle: .degrees(0),
-            endAngle: .degrees(90),
-            clockwise: false
-        )
-        path.addLine(to: CGPoint(x: rect.minX + bottomRadius, y: rect.maxY))
-        path.addArc(
-            center: CGPoint(x: rect.minX + bottomRadius, y: rect.maxY - bottomRadius),
-            radius: bottomRadius,
-            startAngle: .degrees(90),
-            endAngle: .degrees(180),
-            clockwise: false
+        path.move(to: CGPoint(x: island.minX, y: island.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: island.minX + topCornerRadius, y: island.minY + topCornerRadius),
+            control: CGPoint(x: island.minX + topCornerRadius, y: island.minY)
         )
 
-        if topRadius > 0.5 {
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topRadius))
-            path.addArc(
-                center: CGPoint(x: rect.minX + topRadius, y: rect.minY + topRadius),
-                radius: topRadius,
-                startAngle: .degrees(180),
-                endAngle: .degrees(270),
-                clockwise: false
+        path.addLine(to: CGPoint(x: island.minX + topCornerRadius, y: island.maxY - bottomCornerRadius))
+
+        path.addQuadCurve(
+            to: CGPoint(
+                x: island.minX + topCornerRadius + bottomCornerRadius,
+                y: island.maxY
+            ),
+            control: CGPoint(x: island.minX + topCornerRadius, y: island.maxY)
+        )
+
+        path.addLine(
+            to: CGPoint(
+                x: island.maxX - topCornerRadius - bottomCornerRadius,
+                y: island.maxY
             )
-        } else {
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-        }
+        )
+
+        path.addQuadCurve(
+            to: CGPoint(
+                x: island.maxX - topCornerRadius,
+                y: island.maxY - bottomCornerRadius
+            ),
+            control: CGPoint(x: island.maxX - topCornerRadius, y: island.maxY)
+        )
+
+        path.addLine(to: CGPoint(x: island.maxX - topCornerRadius, y: island.minY + topCornerRadius))
+
+        path.addQuadCurve(
+            to: CGPoint(x: island.maxX, y: island.minY),
+            control: CGPoint(x: island.maxX - topCornerRadius, y: island.minY)
+        )
 
         path.closeSubpath()
         return path

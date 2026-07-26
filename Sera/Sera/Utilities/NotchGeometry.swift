@@ -51,8 +51,8 @@ enum NotchGeometry {
         var frame = info.notchFrame
         frame.origin.x -= horizontalPadding
         frame.size.width += horizontalPadding * 2
-        // Slightly taller than the physical cutout so the black shell reads as an island.
-        let height = max(info.notchFrame.height, 34)
+        // Idle height tracks the menu bar / hardware notch — no extra drop.
+        let height = info.menubarHeight
         frame.origin.y = info.screen.frame.maxY - height
         frame.size.height = height
         return frame
