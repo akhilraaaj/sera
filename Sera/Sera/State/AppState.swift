@@ -14,6 +14,10 @@ final class AppState: ObservableObject {
     @Published var isExpanded: Bool = false
     @Published var isNotchExpanded: Bool = false
     @Published var isPanelOpen: Bool = false
+    /// Composer drawn inside the notch island. The island becomes key while this is true.
+    @Published private(set) var isAddGoalPresented: Bool = false
+    /// Hover-leave and focus-loss collapse are ignored until this instant after an action.
+    private(set) var suppressNotchCollapseUntil: Date = .distantPast
     @Published private(set) var snapshot: ProgressSnapshot = .empty
     @Published private(set) var now: Date = Date()
 
@@ -98,8 +102,25 @@ final class AppState: ObservableObject {
             isNotchExpanded = expanded
             if !expanded {
                 isPanelOpen = false
+                isAddGoalPresented = false
             }
         }
+    }
+
+    /// Idle island. Clears Timelines and the calendar as well as the hover shell.
+    func collapseNotch() {
+        Task { @MainActor in
+            guard Date() >= suppressNotchCollapseUntil else { return }
+            isNotchExpanded = false
+            isPanelOpen = false
+            isAddGoalPresented = false
+        }
+    }
+
+    /// Keeps the island expanded across the focus change that follows an action.
+    func noteNotchAction() {
+        isNotchExpanded = true
+        suppressNotchCollapseUntil = Date().addingTimeInterval(0.85)
     }
 
     func refresh(at date: Date = Date()) {
@@ -143,6 +164,7 @@ final class AppState: ObservableObject {
         Task { @MainActor in
             applySelection(.year)
             isPanelOpen = false
+            noteNotchAction()
         }
     }
 
@@ -150,6 +172,17 @@ final class AppState: ObservableObject {
         Task { @MainActor in
             applySelection(.goal(id))
             isPanelOpen = false
+            noteNotchAction()
+        }
+    }
+
+    func deleteGoal(id: UUID) {
+        Task { @MainActor in
+            if case .goal(let selected) = selection, selected == id {
+                applySelection(.year)
+            }
+            goalEngine.delete(id: id)
+            noteNotchAction()
         }
     }
 
@@ -159,9 +192,35 @@ final class AppState: ObservableObject {
         }
     }
 
+    func presentAddGoal() {
+        Task { @MainActor in
+            isNotchExpanded = true
+            // Keep Timelines underneath. Closing it here flashes the home
+            // dashboard for the first frames of the calendar open.
+            isAddGoalPresented = true
+        }
+    }
+
+    func cancelAddGoal() {
+        Task { @MainActor in
+            isAddGoalPresented = false
+            isNotchExpanded = true
+            isPanelOpen = true
+            noteNotchAction()
+        }
+    }
+
+    func dismissAddGoal() {
+        Task { @MainActor in
+            isAddGoalPresented = false
+            noteNotchAction()
+        }
+    }
+
     func closeTimelines() {
         Task { @MainActor in
             isPanelOpen = false
+            noteNotchAction()
         }
     }
 

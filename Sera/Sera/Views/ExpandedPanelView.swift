@@ -204,24 +204,59 @@ struct GoalSelectorPanel: View {
                     appState.selectYear()
                 }
 
-                if appState.goalEngine.goals.isEmpty {
-                    Text("No goals yet. Coming in future updates.")
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, compact ? 2 : 14)
-                        .padding(.vertical, compact ? 6 : 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    ForEach(appState.goalEngine.goals) { goal in
-                        let snap = appState.goalEngine.snapshot(for: goal)
-                        selectorRow(
-                            title: goal.title,
-                            subtitle: snap.percentDisplay,
-                            selected: appState.selection == .goal(goal.id)
-                        ) {
-                            appState.selectGoal(id: goal.id)
+                ForEach(appState.goalEngine.goals) { goal in
+                    let snap = appState.goalEngine.snapshot(for: goal)
+                    selectorRow(
+                        title: goal.title,
+                        subtitle: snap.percentDisplay,
+                        selected: appState.selection == .goal(goal.id)
+                    ) {
+                        appState.selectGoal(id: goal.id)
+                    }
+                    .contextMenu {
+                        Button("Delete", role: .destructive) {
+                            appState.deleteGoal(id: goal.id)
                         }
                     }
+                }
+
+                if appState.goalEngine.goals.isEmpty {
+                    Text(compact ? "No end goals yet." : "No custom end goals yet.")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, compact ? 2 : 6)
+                        .padding(.top, compact ? 4 : 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if compact {
+                    Button {
+                        appState.presentAddGoal()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(SeraTheme.progress)
+                                .frame(width: 22, height: 22)
+                                .background(
+                                    Circle()
+                                        .fill(SeraTheme.progress.opacity(0.16))
+                                )
+                            Text("New end goal")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.primary.opacity(0.05))
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
             }
             .padding(.horizontal, compact ? 0 : 8)

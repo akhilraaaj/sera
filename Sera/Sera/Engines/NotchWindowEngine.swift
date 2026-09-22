@@ -8,7 +8,7 @@ import SwiftUI
 /// between idle and expanded so hover never opens a gap under the menu bar.
 @MainActor
 final class NotchWindowEngine {
-    private let panel: NSPanel
+    private let panel: NotchPanel
     private let hostingView: NSHostingView<AnyView>
     private let appState: AppState
     private let notchLayout = NotchLayout()
@@ -17,15 +17,17 @@ final class NotchWindowEngine {
     private var localMonitor: Any?
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
+    private var focusObservers: [NSObjectProtocol] = []
     private var cancellables = Set<AnyCancellable>()
     private var collapseWorkItem: DispatchWorkItem?
     private var expandWorkItem: DispatchWorkItem?
     private var spaceExpandWorkItem: DispatchWorkItem?
+    private var heightAnimationID = 0
+    private var interactiveIslandHeight: CGFloat = 210
+    /// True while we resign key ourselves so that cleanup does not collapse the island.
+    private var ignoringFocusLoss = false
     private var ignoreHoverUntil: Date = .distantPast
 
-    private let expandedSize = CGSize(width: 560, height: 210)
-    /// Shoulder width beside the camera cutout — leaves room for progress /
-    /// percent inside the idle ear + bottom-corner silhouette.
     private let collapsedShoulderWidth: CGFloat = 64
     /// Brief pause before morphing so hover/leave feel intentional, not jumpy.
     private let hoverExpandDelay: TimeInterval = 0.1
@@ -43,12 +45,14 @@ final class NotchWindowEngine {
             .tint(SeraTheme.progress)
 
         hostingView = NSHostingView(rootView: AnyView(root))
-        hostingView.frame = NSRect(origin: .zero, size: expandedSize)
+        hostingView.frame = NSRect(origin: .zero, size: notchLayout.composerSize)
+        // The calendar must not resize the panel. Height changes are a clip morph.
+        hostingView.sizingOptions = []
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         hostingView.autoresizingMask = [.width, .height]
 
-        panel = NSPanel(
+        panel = NotchPanel(
             contentRect: hostingView.frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -80,9 +84,11 @@ final class NotchWindowEngine {
         observeState()
         observeScreens()
         observeSpaceChanges()
+        observeFocus()
     }
 
     func destroy() {
+        heightAnimationID += 1
         collapseWorkItem?.cancel()
         expandWorkItem?.cancel()
         spaceExpandWorkItem?.cancel()
@@ -98,10 +104,14 @@ final class NotchWindowEngine {
         if let spaceObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver)
         }
+        for observer in focusObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
         mouseMonitor = nil
         localMonitor = nil
         screenObserver = nil
         spaceObserver = nil
+        focusObservers.removeAll()
         cancellables.removeAll()
         appState.setNotchExpanded(false)
         panel.orderOut(nil)
@@ -110,8 +120,8 @@ final class NotchWindowEngine {
 
     // MARK: - Layout
 
-    /// Panel always uses the expanded frame (top-pinned). Idle vs hover is a
-    /// SwiftUI clip morph — no window height animation, so no menubar gap.
+    /// Panel stays at the tallest size, top-pinned. Idle, dashboard, and calendar
+    /// are clip morphs inside that window so the frame never jumps.
     private func applyWindowFrame() {
         guard let info = NotchGeometry.info() else { return }
 
@@ -122,8 +132,8 @@ final class NotchWindowEngine {
         notchLayout.idleSize = idle.size
 
         let size = CGSize(
-            width: min(expandedSize.width, info.screen.frame.width - 40),
-            height: expandedSize.height
+            width: min(notchLayout.composerSize.width, info.screen.frame.width - 40),
+            height: notchLayout.composerSize.height
         )
         let target = NotchGeometry.expandedFrame(
             info: info,
@@ -132,14 +142,100 @@ final class NotchWindowEngine {
         )
 
         panel.hasShadow = false
+        panel.contentMinSize = target.size
+        panel.contentMaxSize = target.size
         panel.setFrame(target, display: true)
         hostingView.frame = NSRect(origin: .zero, size: target.size)
         updateMouseEventPassthrough()
     }
 
+    /// Screen rect of the black island, not the transparent window around it.
+    private func visualIslandFrame() -> NSRect {
+        let height = min(notchLayout.composerSize.height, max(notchLayout.dashboardSize.height, interactiveIslandHeight))
+        return NSRect(
+            x: panel.frame.minX,
+            y: panel.frame.maxY - height,
+            width: panel.frame.width,
+            height: height
+        )
+    }
+
     private func updateMouseEventPassthrough() {
-        let interactive = appState.isNotchExpanded || appState.isPanelOpen
-        panel.ignoresMouseEvents = !interactive
+        let open = appState.isNotchExpanded || appState.isPanelOpen || appState.isAddGoalPresented
+        let inside = visualIslandFrame().insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
+        panel.ignoresMouseEvents = !(open && inside)
+    }
+
+    /// Text fields cannot take keys in a non-activating panel. While the
+    /// composer is up, the island itself becomes the key window.
+    private func setComposerKey(_ key: Bool) {
+        if key {
+            cancelScheduledCollapse()
+            panel.allowsKeyInput = true
+            panel.styleMask.remove(.nonactivatingPanel)
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
+        } else {
+            ignoringFocusLoss = true
+            panel.allowsKeyInput = false
+            if !panel.styleMask.contains(.nonactivatingPanel) {
+                panel.styleMask.insert(.nonactivatingPanel)
+            }
+            if panel.isKeyWindow {
+                panel.resignKey()
+            }
+            NSApp.deactivate()
+            DispatchQueue.main.async { [weak self] in
+                self?.ignoringFocusLoss = false
+            }
+        }
+    }
+
+    /// Matches the SwiftUI island spring so clicks follow the growing shell.
+    private func animateInteractiveHeight(to target: CGFloat) {
+        heightAnimationID += 1
+        let animationID = heightAnimationID
+        let from = interactiveIslandHeight
+        let started = CACurrentMediaTime()
+        stepInteractiveHeight(id: animationID, from: from, to: target, started: started)
+    }
+
+    private func stepInteractiveHeight(id: Int, from: CGFloat, to target: CGFloat, started: CFTimeInterval) {
+        guard id == heightAnimationID else { return }
+        let duration = 0.55
+        let t = min(1, (CACurrentMediaTime() - started) / duration)
+        interactiveIslandHeight = from + (target - from) * Self.ease(t)
+        updateMouseEventPassthrough()
+        guard t < 1 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60.0) { [weak self] in
+            self?.stepInteractiveHeight(id: id, from: from, to: target, started: started)
+        }
+    }
+
+    /// cubic-bezier(0.22, 1, 0.36, 1) — same curve as the notch spring.
+    private static func ease(_ x: Double) -> Double {
+        let x1 = 0.22
+        let y1 = 1.0
+        let x2 = 0.36
+        let y2 = 1.0
+        let cx = 3 * x1
+        let bx = 3 * (x2 - x1) - cx
+        let ax = 1 - cx - bx
+        let cy = 3 * y1
+        let by = 3 * (y2 - y1) - cy
+        let ay = 1 - cy - by
+
+        func sampleX(_ t: Double) -> Double { ((ax * t + bx) * t + cx) * t }
+        func sampleY(_ t: Double) -> Double { ((ay * t + by) * t + cy) * t }
+        func sampleDerivX(_ t: Double) -> Double { (3 * ax * t + 2 * bx) * t + cx }
+
+        var t = x
+        for _ in 0..<5 {
+            let slope = sampleDerivX(t)
+            if abs(slope) < 1e-6 { break }
+            t -= (sampleX(t) - x) / slope
+        }
+        return sampleY(min(1, max(0, t)))
     }
 
     // MARK: - Hover
@@ -155,14 +251,15 @@ final class NotchWindowEngine {
     }
 
     private func handleMouse(_ event: NSEvent) {
+        updateMouseEventPassthrough()
         guard Date() >= ignoreHoverUntil else { return }
 
         let point = NSEvent.mouseLocation
-        let open = appState.isNotchExpanded || appState.isPanelOpen
+        let open = appState.isNotchExpanded || appState.isPanelOpen || appState.isAddGoalPresented
 
         let hit: Bool
         if open {
-            hit = panel.frame.insetBy(dx: -6, dy: -6).contains(point)
+            hit = visualIslandFrame().insetBy(dx: -6, dy: -6).contains(point)
         } else if let info = NotchGeometry.info() {
             // Only the idle island / notch band — not the full transparent window.
             hit = NotchGeometry.collapsedFrame(
@@ -182,7 +279,11 @@ final class NotchWindowEngine {
             }
         } else {
             cancelScheduledExpand()
-            if appState.isNotchExpanded, !appState.isPanelOpen {
+            guard !isCollapseSuppressed else {
+                cancelScheduledCollapse()
+                return
+            }
+            if appState.isNotchExpanded || appState.isPanelOpen || appState.isAddGoalPresented {
                 scheduleCollapse()
             }
         }
@@ -218,9 +319,10 @@ final class NotchWindowEngine {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.collapseWorkItem = nil
+            guard !self.isCollapseSuppressed else { return }
             let point = NSEvent.mouseLocation
-            if self.panel.frame.insetBy(dx: -6, dy: -6).contains(point) { return }
-            self.appState.setNotchExpanded(false)
+            if self.visualIslandFrame().insetBy(dx: -6, dy: -6).contains(point) { return }
+            self.appState.collapseNotch()
         }
         collapseWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + hoverCollapseDelay, execute: work)
@@ -259,6 +361,22 @@ final class NotchWindowEngine {
             }
             .store(in: &cancellables)
 
+        appState.$isAddGoalPresented
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] presented in
+                guard let self else { return }
+                if presented, !self.appState.isNotchExpanded {
+                    self.appState.setNotchExpanded(true)
+                }
+                self.animateInteractiveHeight(
+                    to: presented ? self.notchLayout.composerSize.height : self.notchLayout.dashboardSize.height
+                )
+                self.updateMouseEventPassthrough()
+                self.setComposerKey(presented)
+            }
+            .store(in: &cancellables)
+
         appState.$displayMode
             .removeDuplicates()
             .dropFirst()
@@ -287,6 +405,47 @@ final class NotchWindowEngine {
         }
     }
 
+    /// Clicking another app resigns this panel. Collapse back to the idle island.
+    private func observeFocus() {
+        let resignActive = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: NSApp,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.collapseFromFocusLoss()
+            }
+        }
+        let resignKey = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.collapseFromFocusLoss()
+            }
+        }
+        focusObservers.append(resignActive)
+        focusObservers.append(resignKey)
+    }
+
+    private var isCollapseSuppressed: Bool {
+        Date() < appState.suppressNotchCollapseUntil
+    }
+
+    private func collapseFromFocusLoss() {
+        guard !ignoringFocusLoss, !isCollapseSuppressed else { return }
+        // A click inside the island (delete, add, a menu) resigns key without
+        // the pointer leaving. Only compress when focus moved off the island.
+        if visualIslandFrame().insetBy(dx: -8, dy: -8).contains(NSEvent.mouseLocation) {
+            return
+        }
+        guard appState.isNotchExpanded || appState.isPanelOpen || appState.isAddGoalPresented else { return }
+        cancelScheduledExpand()
+        cancelScheduledCollapse()
+        appState.collapseNotch()
+    }
+
     /// Mission Control / desktop swipe / Cmd-Tab back to a space: snap to idle
     /// first, then morph open if the cursor sits on the notch so expand stays smooth.
     private func observeSpaceChanges() {
@@ -305,8 +464,8 @@ final class NotchWindowEngine {
         applyWindowFrame()
         panel.orderFrontRegardless()
 
-        // Timelines stays open across spaces — don't interrupt it.
-        guard !appState.isPanelOpen else {
+        // Timelines and the goal composer stay open across spaces.
+        guard !appState.isPanelOpen, !appState.isAddGoalPresented else {
             updateMouseEventPassthrough()
             return
         }
@@ -348,4 +507,12 @@ final class NotchWindowEngine {
         .insetBy(dx: -10, dy: -4)
         .contains(NSEvent.mouseLocation)
     }
+}
+
+/// Borderless notch panel that can accept keyboard focus while a goal is being named.
+private final class NotchPanel: NSPanel {
+    var allowsKeyInput = false
+
+    override var canBecomeKey: Bool { allowsKeyInput }
+    override var canBecomeMain: Bool { allowsKeyInput }
 }

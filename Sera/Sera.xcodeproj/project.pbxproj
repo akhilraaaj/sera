@@ -23,6 +23,7 @@
 		A1000000000000000000000D /* LinearProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* LinearProgressView.swift */; };
 		A1000000000000000000000E /* GridProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* GridProgressView.swift */; };
 		A1000000000000000000000F /* ExpandedPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* ExpandedPanelView.swift */; };
+		A1000000000000000000001F /* AddGoalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001F /* AddGoalView.swift */; };
 		A10000000000000000000010 /* DockPosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* DockPosition.swift */; };
 		A10000000000000000000011 /* DateMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* DateMath.swift */; };
 		A10000000000000000000012 /* InsightEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* InsightEngine.swift */; };
@@ -52,6 +53,7 @@
 		A2000000000000000000000D /* LinearProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinearProgressView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000E /* GridProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridProgressView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* ExpandedPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpandedPanelView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001F /* AddGoalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddGoalView.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* DockPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockPosition.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* DateMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateMath.swift; sourceTree = "<group>"; };
 		A20000000000000000000012 /* InsightEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightEngine.swift; sourceTree = "<group>"; };
@@ -160,6 +162,7 @@
 				A2000000000000000000000D /* LinearProgressView.swift */,
 				A2000000000000000000000E /* GridProgressView.swift */,
 				A2000000000000000000000F /* ExpandedPanelView.swift */,
+				A2000000000000000000001F /* AddGoalView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -262,6 +265,7 @@
 				A1000000000000000000000D /* LinearProgressView.swift in Sources */,
 				A1000000000000000000000E /* GridProgressView.swift in Sources */,
 				A1000000000000000000000F /* ExpandedPanelView.swift in Sources */,
+				A1000000000000000000001F /* AddGoalView.swift in Sources */,
 				A10000000000000000000010 /* DockPosition.swift in Sources */,
 				A10000000000000000000011 /* DateMath.swift in Sources */,
 				A10000000000000000000012 /* InsightEngine.swift in Sources */,

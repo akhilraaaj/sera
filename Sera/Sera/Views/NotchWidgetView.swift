@@ -7,15 +7,26 @@ struct NotchWidgetView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var notchLayout: NotchLayout
     @State private var revealsExpandedContent = false
+    /// Animated island height. Dashboard and calendar share one spring.
+    @State private var shellHeight: CGFloat = 210
 
     private var expanded: Bool {
-        appState.isNotchExpanded || appState.isPanelOpen
+        appState.isNotchExpanded || appState.isPanelOpen || appState.isAddGoalPresented
+    }
+
+    /// 0 at the dashboard height, 1 when the calendar has fully opened.
+    private var composerBlend: CGFloat {
+        let dash = notchLayout.dashboardSize.height
+        let full = notchLayout.composerSize.height
+        guard full > dash else { return 0 }
+        return min(1, max(0, (shellHeight - dash) / (full - dash)))
     }
 
     private var islandShape: NotchIslandShape {
         NotchIslandShape(
             expansion: expanded ? 1 : 0,
-            idleSize: notchLayout.idleSize
+            idleSize: notchLayout.idleSize,
+            expandedHeight: shellHeight
         )
     }
 
@@ -39,7 +50,13 @@ struct NotchWidgetView: View {
         .clipShape(islandShape)
         .contentShape(islandShape)
         .animation(notchSpring, value: expanded)
+        .animation(notchSpring, value: shellHeight)
         .animation(.easeOut(duration: 0.18), value: revealsExpandedContent)
+        .onAppear {
+            shellHeight = appState.isAddGoalPresented
+                ? notchLayout.composerSize.height
+                : notchLayout.dashboardSize.height
+        }
         .onChange(of: expanded) { isExpanded in
             if isExpanded {
                 revealsExpandedContent = false
@@ -50,6 +67,11 @@ struct NotchWidgetView: View {
             } else {
                 revealsExpandedContent = false
             }
+        }
+        .onChange(of: appState.isAddGoalPresented) { presented in
+            shellHeight = presented
+                ? notchLayout.composerSize.height
+                : notchLayout.dashboardSize.height
         }
     }
 
@@ -93,16 +115,31 @@ struct NotchWidgetView: View {
             Color.clear
                 .frame(height: 38)
 
-            Group {
-                if appState.isPanelOpen {
-                    GoalSelectorPanel(compact: true)
-                        .padding(.horizontal, 36)
-                        .padding(.bottom, 14)
-                } else {
-                    dashboard
+            ZStack(alignment: .top) {
+                Group {
+                    if appState.isPanelOpen {
+                        GoalSelectorPanel(compact: true)
+                            .padding(.horizontal, 36)
+                            .padding(.bottom, 14)
+                    } else {
+                        dashboard
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+                .frame(height: notchLayout.dashboardSize.height - 38, alignment: .top)
+                .opacity(1 - composerBlend)
+                .allowsHitTesting(composerBlend < 0.45)
+
+                if appState.isAddGoalPresented || composerBlend > 0.02 {
+                    NotchAddGoalView()
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .frame(height: notchLayout.composerSize.height - 38, alignment: .top)
+                        .opacity(composerBlend)
+                        .allowsHitTesting(composerBlend > 0.45)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .top)
+            .frame(height: max(0, shellHeight - 38), alignment: .top)
             .clipped()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -248,23 +285,29 @@ private struct NotchToolbarButtonStyle: ButtonStyle {
 /// Mac-notch silhouette morphing inside a fixed, top-pinned window.
 ///
 /// `expansion == 0` draws the idle island (centered, menu-bar height).
-/// `expansion == 1` fills the window with the hover dashboard silhouette.
+/// `expansion == 1` draws the dashboard or calendar height — the window frame
+/// never changes, so the shell can grow and shrink without a jump.
 /// Soft bottom corners and concave top ears stay for the whole morph.
 private struct NotchIslandShape: Shape {
     var expansion: CGFloat
     var idleSize: CGSize
+    var expandedHeight: CGFloat
 
-    var animatableData: CGFloat {
-        get { expansion }
-        set { expansion = newValue }
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(expansion, expandedHeight) }
+        set {
+            expansion = newValue.first
+            expandedHeight = newValue.second
+        }
     }
 
     func path(in rect: CGRect) -> Path {
         let amount = min(1, max(0, expansion))
         let idleWidth = min(idleSize.width, rect.width)
         let idleHeight = min(idleSize.height, rect.height)
+        let targetHeight = min(rect.height, max(idleHeight, expandedHeight))
         let width = idleWidth + (rect.width - idleWidth) * amount
-        let height = idleHeight + (rect.height - idleHeight) * amount
+        let height = idleHeight + (targetHeight - idleHeight) * amount
         let island = CGRect(
             x: rect.midX - width / 2,
             y: rect.minY,
@@ -274,9 +317,9 @@ private struct NotchIslandShape: Shape {
 
         let idealTop = 6 + (10 - 6) * amount
         let idealBottom = 12 + (24 - 12) * amount
-        let topCornerRadius = min(idealTop, max(0, island.height * 0.28))
+        let topCornerRadius = min(idealTop, max(0, island.height * 0.45))
         let bottomCornerRadius = min(
-            max(idealBottom, min(12, island.height * 0.36)),
+            idealBottom,
             max(0, island.height - topCornerRadius - 1)
         )
 

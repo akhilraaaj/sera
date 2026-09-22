@@ -19,7 +19,12 @@ enum NotchGeometry {
         guard let screen else { return nil }
         let frame = screen.frame
         let visible = screen.visibleFrame
-        let menubarHeight = max(24, frame.maxY - visible.maxY)
+        // The menu bar band is the gap above `visibleFrame`. Status-item
+        // thickness is often shorter than that on notched Macs, which leaves
+        // a strip of wallpaper under the island.
+        let measured = frame.maxY - visible.maxY
+        let statusBar = NSStatusBar.system.thickness
+        let menubarHeight = ceil(max(measured > 1 ? measured : 0, statusBar > 1 ? statusBar : 0, 24))
 
         if let notch = hardwareNotchFrame(on: screen, menubarHeight: menubarHeight) {
             return Info(
@@ -51,7 +56,7 @@ enum NotchGeometry {
         var frame = info.notchFrame
         frame.origin.x -= horizontalPadding
         frame.size.width += horizontalPadding * 2
-        // Idle height tracks the menu bar / hardware notch — no extra drop.
+        // Idle height matches the menu bar exactly — flush top and bottom, no chin.
         let height = info.menubarHeight
         frame.origin.y = info.screen.frame.maxY - height
         frame.size.height = height

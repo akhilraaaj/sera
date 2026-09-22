@@ -2,7 +2,6 @@ import Combine
 import Foundation
 
 /// Persists goals locally and computes progress via `TimeEngine`.
-/// Phase 1: store + API ready; UI create/edit lands in Phase 3.
 @MainActor
 final class GoalEngine: ObservableObject {
     @Published private(set) var goals: [Goal] = []
